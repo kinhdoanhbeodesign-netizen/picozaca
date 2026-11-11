@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Picozaca – Quản lý quán ăn vặt</title>
+<meta name="theme-color" content="#f97316">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍢</text></svg>">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<aside class="nav" id="nav">
+  <div class="brand">🍢 <span>Picozaca</span></div>
+  <button data-view="home"><i>🏠</i><span>Tổng quan</span></button>
+  <button data-view="pos"><i>🛒</i><span>Bán hàng</span></button>
+  <button data-view="stock"><i>📦</i><span>Kho</span></button>
+  <button data-view="menu"><i>🍟</i><span>Thực đơn</span></button>
+  <button data-view="cash"><i>💰</i><span>Thu chi</span></button>
+  <button data-view="report"><i>📊</i><span>Báo cáo</span></button>
+</aside>
+<main>
+  <header class="top">
+    <h1 id="title"></h1>
+    <button class="icon-btn" data-view="settings" title="Cài đặt &amp; sao lưu" aria-label="Cài đặt">⚙️</button>
+  </header>
+  <div id="app"></div>
+</main>
+<dialog id="dlg"></dialog>
+<div id="toast" role="status"></div>
+<script src="app.js"></script>
+</body>
+</html>
