@@ -4,13 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Picozaca – Quản lý quán ăn vặt</title>
-<meta name="theme-color" content="#f97316">
+<meta name="theme-color" content="#d3e8da">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍢</text></svg>">
-<link rel="stylesheet" href="style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
 <aside class="nav" id="nav">
-  <div class="brand">🍢 <span>Picozaca</span></div>
+  <div class="brand"><div class="ava">🍢</div><b>Picozaca</b><small>Xin chào 👋</small></div>
   <button data-view="home"><i>🏠</i><span>Tổng quan</span></button>
   <button data-view="pos"><i>🛒</i><span>Bán hàng</span></button>
   <button data-view="stock"><i>📦</i><span>Kho</span></button>
@@ -27,6 +30,6 @@
 </main>
 <dialog id="dlg"></dialog>
 <div id="toast" role="status"></div>
-<script src="app.js"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

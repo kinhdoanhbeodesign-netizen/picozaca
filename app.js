@@ -44,13 +44,40 @@ function load() {
   try { return Object.assign(blank(), JSON.parse(localStorage.getItem(KEY)) || {}); }
   catch { return blank(); }
 }
-function save() { localStorage.setItem(KEY, JSON.stringify(db)); }
+function save() {
+  try { localStorage.setItem(KEY, JSON.stringify(db)); }
+  catch { alert('Bộ nhớ trình duyệt đã đầy nên chưa lưu được. Hãy tải bản sao lưu ở mục Cài đặt và bỏ bớt ảnh món.'); }
+}
 
 const ing = id => db.ingredients.find(i => i.id === id);
 const productCost = p => sum(p.recipe || [], r => { const i = ing(r.ingId); return i ? i.cost * r.qty : 0; });
 const inRange = (start, end) => x => x.date >= start && x.date <= end;
 const CAT = { food: 'Đồ ăn', drink: 'Thức uống' };
 const CAT_ICON = { food: '🍢', drink: '🥤' };
+
+/* Hình món: ảnh tải lên, hoặc biểu tượng đã chọn, hoặc đoán theo tên món */
+const ICONS = ['🍢', '🍡', '🌭', '🍟', '🍗', '🍖', '🍔', '🍕', '🥪', '🥖', '🌮', '🥟', '🍤', '🍙', '🍚', '🍜', '🍲', '🥗', '🥞', '🧇', '🍳', '🥚', '🌽', '🍠', '🧀', '🍰', '🧁', '🍩', '🍪', '🍮', '🍧', '🍦', '🍿', '🍬', '🥤', '🍵', '☕', '🥛', '🧃', '🍹', '🍺', '🍋', '🍑', '🍓', '🍊', '🥭', '🍉', '🥥', '🍽️'];
+const GUESS = [['trà sữa', '🥤'], ['trân châu', '🥤'], ['cà phê', '☕'], ['cafe', '☕'], ['chanh', '🍋'], ['đào', '🍑'], ['cam', '🍊'], ['dâu', '🍓'], ['xoài', '🥭'], ['dưa', '🍉'], ['dừa', '🥥'],
+  ['sinh tố', '🍹'], ['nước ép', '🧃'], ['bia', '🍺'], ['trà', '🍵'], ['sữa', '🥛'], ['kem', '🍦'], ['chè', '🍧'], ['khoai lang', '🍠'], ['khoai', '🍟'], ['xúc xích', '🌭'], ['cá viên', '🍡'], ['viên', '🍡'],
+  ['bánh tráng', '🥗'], ['bánh mì', '🥖'], ['bánh flan', '🍮'], ['bánh', '🥞'], ['gà', '🍗'], ['mì', '🍜'], ['phở', '🍜'], ['bún', '🍜'], ['lẩu', '🍲'], ['cơm', '🍚'], ['trứng', '🥚'], ['pizza', '🍕'], ['burger', '🍔'],
+  ['nem', '🥟'], ['há cảo', '🥟'], ['xiên', '🍢'], ['bắp', '🌽'], ['ngô', '🌽'], ['tôm', '🍤'], ['phô mai', '🧀'], ['coca', '🥤'], ['pepsi', '🥤'], ['soda', '🥤'], ['nước', '🥤']];
+function guessIcon(name, category) {
+  const n = String(name || '').toLowerCase(), hit = GUESS.find(([k]) => n.includes(k));
+  return hit ? hit[1] : CAT_ICON[category] || '🍽️';
+}
+const pic = (p, cls = '') => `<span class="pic ${cls}">${p?.img ? `<img src="${p.img}" alt="">` : esc(p?.icon || guessIcon(p?.name, p?.category))}</span>`;
+function resizeImage(file, size = 200) {
+  return new Promise((res, rej) => {
+    const im = new Image();
+    im.onload = () => {
+      const c = document.createElement('canvas'); c.width = c.height = size;
+      const s = Math.min(im.width, im.height);
+      c.getContext('2d').drawImage(im, (im.width - s) / 2, (im.height - s) / 2, s, s, 0, 0, size, size);
+      URL.revokeObjectURL(im.src); res(c.toDataURL('image/jpeg', .82));
+    };
+    im.onerror = rej; im.src = URL.createObjectURL(file);
+  });
+}
 
 function txns(start, end) {
   const ok = inRange(start, end), list = [];
@@ -76,9 +103,9 @@ function summary(start, end) {
 }
 function productStats(start, end) {
   const map = new Map();
-  db.products.forEach(p => map.set(p.id, { name: p.name, category: p.category, qty: 0, revenue: 0, profit: 0 }));
+  db.products.forEach(p => map.set(p.id, { p, name: p.name, category: p.category, qty: 0, revenue: 0, profit: 0 }));
   db.sales.filter(inRange(start, end)).forEach(s => s.items.forEach(i => {
-    if (!map.has(i.productId)) map.set(i.productId, { name: i.name, category: i.category, qty: 0, revenue: 0, profit: 0 });
+    if (!map.has(i.productId)) map.set(i.productId, { p: i, name: i.name, category: i.category, qty: 0, revenue: 0, profit: 0 });
     const r = map.get(i.productId);
     r.qty += i.qty; r.revenue += i.qty * i.price; r.profit += i.qty * (i.price - i.cost);
   }));
@@ -184,34 +211,62 @@ function stockTag(i) {
 const views = {
   home() {
     if (!db.products.length && !db.ingredients.length) {
-      return `<div class="card">${emptyBox('👋', `<h2 style="color:var(--ink)">Chào mừng đến với Picozaca!</h2>
-        <p>Bắt đầu theo 3 bước:<br>1. Vào <b style="display:inline;font-size:inherit">Kho</b> thêm nguyên liệu và nhập hàng<br>
-        2. Vào <b style="display:inline;font-size:inherit">Thực đơn</b> tạo món và công thức để tính giá vốn<br>
-        3. Vào <b style="display:inline;font-size:inherit">Bán hàng</b> để ghi đơn mỗi ngày</p>`,
-        `<div class="row" style="justify-content:center"><button class="btn primary" data-view="stock">Thêm nguyên liệu đầu tiên</button>
-        <button class="btn" data-act="sample">Xem thử với dữ liệu mẫu</button></div>`)}</div>`;
+      return `<div class="hero"><div class="art">👋</div><div><h2>Chào mừng đến với Picozaca!</h2>
+        <p>Bắt đầu theo 3 bước: thêm nguyên liệu ở <b>Kho</b>, tạo món ở <b>Thực đơn</b>, rồi ghi đơn ở <b>Bán hàng</b>.</p>
+        <div class="row"><button class="btn primary" data-view="stock">Thêm nguyên liệu đầu tiên</button>
+        <button class="btn" data-act="sample">Xem thử với dữ liệu mẫu</button></div></div></div>`;
     }
-    const t = today(), d = summary(t, t), w = range('week', t), ws = summary(w.start, w.end);
-    const low = db.ingredients.filter(i => i.stock <= i.min);
-    const top = productStats(w.start, w.end).filter(p => p.qty > 0).sort((a, b) => b.qty - a.qty).slice(0, 5);
-    return `<div class="grid g4" style="margin-bottom:16px">
-        <div class="stat"><small>Thu hôm nay</small><b class="pos">${money(d.thu)}</b><em>${d.orders} đơn bán</em></div>
-        <div class="stat"><small>Chi hôm nay</small><b class="neg">${money(d.chi)}</b><em>&nbsp;</em></div>
-        <div class="stat"><small>Thu tuần này</small><b class="pos">${money(ws.thu)}</b><em>${w.label}</em></div>
-        <div class="stat"><small>Còn lại tuần này</small><b class="${ws.net >= 0 ? 'pos' : 'neg'}">${money(ws.net)}</b><em>Chi ${money(ws.chi)}</em></div>
+    const t = today(), yd = addDays(t, -1), d = summary(t, t), y = summary(yd, yd);
+    const w = range('week', t), ws = summary(w.start, w.end), lw = summary(addDays(w.start, -7), addDays(w.end, -7));
+    const trend = (cur, prev, vs) => prev
+      ? `<em class="${cur >= prev ? 'up' : 'down'}">${cur >= prev ? '▲' : '▼'} ${Math.abs((cur - prev) / prev * 100).toFixed(0)}% so với ${vs}</em>`
+      : `<em>Chưa có số ${vs}</em>`;
+    const hr = new Date().getHours();
+    const [greet, sun] = hr < 11 ? ['Chào buổi sáng', '☀️'] : hr < 14 ? ['Chào buổi trưa', '🌤️'] : hr < 18 ? ['Chào buổi chiều', '🌇'] : ['Chào buổi tối', '🌙'];
+    const short = v => v >= 1e6 ? (v / 1e6).toFixed(1).replace('.', ',') + 'tr' : v ? Math.round(v / 1000) + 'k' : '0';
+    const days = [];
+    for (let k = 6; k >= 0; k--) { const date = addDays(t, -k); days.push({ label: k ? DOW[parse(date).getDay()] : 'Nay', v: sum(db.sales.filter(s => s.date === date), s => s.total) }); }
+    const max = Math.max(1, ...days.map(x => x.v));
+    const stats = productStats(w.start, w.end).filter(p => p.qty > 0);
+    const byRev = [...stats].sort((a, b) => b.revenue - a.revenue);
+    const parts = byRev.slice(0, 4).map(p => ({ name: p.name, v: p.revenue }));
+    const rest = sum(byRev.slice(4), p => p.revenue); if (rest) parts.push({ name: 'Món khác', v: rest });
+    const tot = sum(parts, p => p.v) || 1; let acc = 0;
+    const grad = parts.map((p, i) => { const a = acc; acc += p.v / tot * 100; return `var(--c${i}) ${a}% ${acc}%`; }).join(',');
+    const recent = [...db.sales].sort((a, b) => b.date.localeCompare(a.date) || b.ts - a.ts).slice(0, 4);
+    const top = [...stats].sort((a, b) => b.qty - a.qty).slice(0, 4);
+    const low = db.ingredients.filter(i => i.stock <= i.min).slice(0, 5);
+    return `<div class="hero"><div class="art">🍢</div>
+        <div><h2>${greet}! ${sun}</h2>
+        <p>${DOW[new Date().getDay()] === 'CN' ? 'Chủ nhật' : 'Thứ ' + DOW[new Date().getDay()].slice(1)}, ${vn(t)} · Hôm nay đã bán ${d.orders} đơn</p>
+        <div class="row"><button class="btn primary" data-view="pos">🛒 Bán hàng ngay</button>
+        <button class="btn" data-act="addCash" data-type="out">＋ Ghi khoản chi</button></div></div>
+        <span class="deco">🥤</span></div>
+      <div class="grid g4" style="margin-bottom:18px">
+        <div class="tile t-mint"><span class="ti">💵</span><small>Doanh thu hôm nay</small><b>${money(d.rev)}</b>${trend(d.rev, y.rev, 'hôm qua')}</div>
+        <div class="tile t-peach"><span class="ti">🧾</span><small>Đơn bán hôm nay</small><b>${d.orders}</b>${trend(d.orders, y.orders, 'hôm qua')}</div>
+        <div class="tile t-yellow"><span class="ti">💸</span><small>Chi hôm nay</small><b>${money(d.chi)}</b><em>Nhập hàng + chi phí khác</em></div>
+        <div class="tile t-blue"><span class="ti">📈</span><small>Doanh thu tuần này</small><b>${money(ws.rev)}</b>${trend(ws.rev, lw.rev, 'tuần trước')}</div>
       </div>
-      <div class="row" style="margin-bottom:16px">
-        <button class="btn primary" data-view="pos">🛒 Bán hàng</button>
-        <button class="btn" data-act="addCash" data-type="out">＋ Ghi khoản chi</button>
-        <button class="btn" data-view="report">📊 Báo cáo tuần</button>
+      <div class="grid g32" style="margin-bottom:18px">
+        <div class="card"><div class="card-h"><h2>Doanh thu 7 ngày qua</h2><button class="btn sm" data-view="cash">Xem thu chi</button></div>
+          <div class="bars7">${days.map((x, i) => `<div class="b" title="${money(x.v)}"><em>${short(x.v)}</em><i style="height:${x.v / max * 125}px;background:var(--c${i % 6})"></i><span>${x.label}</span></div>`).join('')}</div></div>
+        <div class="card"><div class="card-h"><h2>Tỷ trọng doanh thu tuần này</h2></div>
+          ${parts.length ? `<div class="donut-wrap"><div class="donut" style="background:conic-gradient(${grad})"></div>
+            <div class="dleg">${parts.map((p, i) => `<div><i style="background:var(--c${i})"></i><span>${esc(p.name)}</span><b>${(p.v / tot * 100).toFixed(0)}%</b></div>`).join('')}</div></div>`
+        : emptyBox('🍽️', 'Tuần này chưa có đơn bán nào')}</div>
       </div>
       <div class="grid g2">
-        <div class="card"><div class="card-h"><h2>⚠️ Cảnh báo kho</h2><button class="btn sm" data-view="stock">Xem kho</button></div>
-          ${low.length ? `<table>${low.map(i => `<tr><td>${esc(i.name)}</td><td class="n">${num(i.stock)} ${esc(i.unit)}</td><td class="n">${stockTag(i)}</td></tr>`).join('')}</table>`
-        : emptyBox('✅', 'Tất cả nguyên liệu đều đủ hàng')}</div>
-        <div class="card"><div class="card-h"><h2>🔥 Bán chạy tuần này</h2></div>
-          ${top.length ? `<table>${top.map((p, i) => `<tr><td>${i + 1}. ${esc(p.name)}</td><td class="n">${num(p.qty)} phần</td><td class="n">${money(p.revenue)}</td></tr>`).join('')}</table>`
+        <div class="card"><div class="card-h"><h2>Đơn gần đây</h2><button class="btn sm" data-view="cash">Xem tất cả</button></div>
+          ${recent.length ? recent.map(s => `<div class="li">${pic(db.products.find(p => p.id === s.items[0].productId) || s.items[0])}
+            <div class="tx"><b>${esc(s.items.map(i => `${i.name} ×${i.qty}`).join(', '))}</b><small>${s.date === t ? 'Hôm nay' : vn(s.date)}</small></div>
+            <b class="pos">+${money(s.total)}</b></div>`).join('') : emptyBox('🧾', 'Chưa có đơn nào')}</div>
+        <div class="card"><div class="card-h"><h2>🔥 Bán chạy tuần này</h2><button class="btn sm" data-view="report">Báo cáo</button></div>
+          ${top.length ? top.map(p => `<div class="li">${pic(p.p)}<div class="tx"><b>${esc(p.name)}</b><small>${money(p.revenue)}</small></div><b>${num(p.qty)} phần</b></div>`).join('')
         : emptyBox('🍽️', 'Tuần này chưa có đơn bán nào')}</div>
+        <div class="card"><div class="card-h"><h2>⚠️ Cảnh báo kho</h2><button class="btn sm" data-view="stock">Xem kho</button></div>
+          ${low.length ? low.map(i => `<div class="li"><span class="pic">📦</span><div class="tx"><b>${esc(i.name)}</b><small>Còn ${num(i.stock)} ${esc(i.unit)}</small></div>${stockTag(i)}</div>`).join('')
+        : emptyBox('✅', 'Tất cả nguyên liệu đều đủ hàng')}</div>
       </div>`;
   },
 
@@ -226,11 +281,11 @@ const views = {
         </div></div>
         <div class="pgrid">${list.map(p => `<button class="pcard" data-act="cartAdd" data-id="${p.id}">
           ${ui.cart[p.id] ? `<span class="badge">${ui.cart[p.id]}</span>` : ''}
-          <span class="em">${CAT_ICON[p.category]}</span><b>${esc(p.name)}</b><small>${money(p.price)}</small></button>`).join('')}</div>
+          ${pic(p, 'lg')}<b>${esc(p.name)}</b><small>${money(p.price)}</small></button>`).join('')}</div>
       </div>
       <div class="card cart"><div class="card-h"><h2>Đơn hàng</h2>
           <input type="date" class="in-date" value="${ui.posDate}" max="${today()}" data-change="posDate" title="Ngày bán"></div>
-        ${items.length ? items.map(x => `<div class="citem"><div class="nm"><b>${esc(x.p.name)}</b><div class="mut">${money(x.p.price * x.qty)}</div></div>
+        ${items.length ? items.map(x => `<div class="citem">${pic(x.p, 'xs')}<div class="nm"><b>${esc(x.p.name)}</b><div class="mut">${money(x.p.price * x.qty)}</div></div>
           <div class="qty"><button data-act="cartSub" data-id="${x.p.id}" aria-label="Bớt">−</button><b>${x.qty}</b><button data-act="cartAdd" data-id="${x.p.id}" aria-label="Thêm">+</button></div></div>`).join('')
         + `<div class="total"><span>Tổng</span><span>${money(total)}</span></div>
           <button class="btn primary big" data-act="checkout">Thanh toán</button>
@@ -267,7 +322,7 @@ const views = {
       ${db.products.length ? `<div class="tbl-wrap"><table><thead><tr><th>Món</th><th class="n">Giá bán</th><th class="n">Giá vốn</th><th class="n">Lãi / phần</th><th class="n hide-m">Tỷ lệ lãi</th><th></th></tr></thead><tbody>
         ${db.products.map(p => {
       const c = productCost(p), profit = p.price - c, pct = p.price ? profit / p.price * 100 : 0;
-      return `<tr><td><b>${esc(p.name)}</b><span class="sub"><span class="tag cat">${CAT_ICON[p.category]} ${CAT[p.category]}</span> ${(p.recipe || []).length ? `${p.recipe.length} nguyên liệu` : 'Chưa có công thức'}</span></td>
+      return `<tr><td><div class="withpic">${pic(p)}<div><b>${esc(p.name)}</b><span class="sub"><span class="tag cat">${CAT[p.category]}</span> ${(p.recipe || []).length ? `${p.recipe.length} nguyên liệu` : 'Chưa có công thức'}</span></div></div></td>
           <td class="n">${money(p.price)}</td><td class="n">${money(c)}</td><td class="n ${profit >= 0 ? 'pos' : 'neg'}"><b>${money(profit)}</b></td><td class="n hide-m">${pct.toFixed(0)}%</td>
           <td class="n"><button class="icon-btn" data-act="editProd" data-id="${p.id}" title="Sửa">✏️</button><button class="icon-btn" data-act="delProd" data-id="${p.id}" title="Xoá">🗑️</button></td></tr>`;
     }).join('')}</tbody></table></div>` : emptyBox('🍟', 'Chưa có món nào. Thêm món và công thức để biết mỗi phần lãi bao nhiêu.')}</div>`;
@@ -291,7 +346,7 @@ const views = {
     const all = productStats(r.start, r.end).filter(p => st.cat === 'all' || p.category === st.cat);
     const by = k => [...all].sort((a, b) => b[k] - a[k]);
     const box = (title, icon, list, k) => `<div class="card" style="margin:0"><div class="card-h"><h2>${icon} ${title}</h2></div>
-      ${list.length ? `<table>${list.map((p, i) => `<tr><td>${i + 1}. ${esc(p.name)}</td><td class="n"><b>${k === 'qty' ? num(p.qty) + ' phần' : money(p.revenue)}</b></td></tr>`).join('')}</table>` : '<span class="mut">Chưa có món</span>'}</div>`;
+      ${list.length ? list.map(p => `<div class="li">${pic(p.p, 'xs')}<div class="tx"><b>${esc(p.name)}</b></div><b>${k === 'qty' ? num(p.qty) + ' phần' : money(p.revenue)}</b></div>`).join('') : '<span class="mut">Chưa có món</span>'}</div>`;
     const sorted = by(st.sort), max = Math.max(1, ...all.map(p => p[st.sort]));
     const tq = sum(all, p => p.qty), tr = sum(all, p => p.revenue), tp = sum(all, p => p.profit);
     return periodBar('rep', ['week', 'month', 'year']) +
@@ -312,7 +367,7 @@ const views = {
           <button class="${st.sort === 'qty' ? 'on' : ''}" data-act="repSet" data-k="sort" data-v="qty">Theo số lượng</button>
           <button class="${st.sort === 'revenue' ? 'on' : ''}" data-act="repSet" data-k="sort" data-v="revenue">Theo doanh thu</button></div></div>
         <div class="tbl-wrap"><table><thead><tr><th>#</th><th>Món</th><th class="hide-m"></th><th class="n">Số lượng</th><th class="n">Doanh thu</th><th class="n hide-m">Lãi gộp</th></tr></thead><tbody>
-        ${sorted.map((p, i) => `<tr><td>${i + 1}</td><td><b>${esc(p.name)}</b><span class="sub">${CAT_ICON[p.category] || ''} ${CAT[p.category] || ''}</span></td>
+        ${sorted.map((p, i) => `<tr><td>${i + 1}</td><td><div class="withpic">${pic(p.p, 'xs')}<div><b>${esc(p.name)}</b><span class="sub">${CAT[p.category] || ''}</span></div></div></td>
           <td class="hide-m" style="width:30%"><div class="hbar"><i style="width:${p[st.sort] / max * 100}%"></i></div></td>
           <td class="n">${num(p.qty)}</td><td class="n">${money(p.revenue)}</td><td class="n hide-m">${money(p.profit)}</td></tr>`).join('')}
         </tbody></table></div></div>` : `<div class="card">${emptyBox('📊', 'Chưa có món nào để thống kê')}</div>`}`;
@@ -420,7 +475,8 @@ const actions = {
 
   editProd({ id }) {
     const p = id ? db.products.find(x => x.id === id) : null;
-    const row = (r = {}) => `<div class="rrow"><select class="r-ing">${db.ingredients.map(i => `<option value="${i.id}" ${i.id === r.ingId ? 'selected' : ''}>${esc(i.name)} (${esc(i.unit)})</option>`).join('')}</select>
+    let icon = p?.icon || '', img = p?.img || '';
+    const row =(r = {}) => `<div class="rrow"><select class="r-ing">${db.ingredients.map(i => `<option value="${i.id}" ${i.id === r.ingId ? 'selected' : ''}>${esc(i.name)} (${esc(i.unit)})</option>`).join('')}</select>
       <input class="r-qty" type="number" step="any" min="0" inputmode="decimal" placeholder="Số lượng" value="${r.qty ?? ''}"><button type="button" class="icon-btn" data-rm aria-label="Bỏ">✕</button></div>`;
     const readRows = form => [...form.querySelectorAll('.rrow')].map(el => ({ ingId: $('.r-ing', el).value, qty: f($('.r-qty', el).value) })).filter(r => r.qty > 0);
     openForm({
@@ -430,7 +486,13 @@ const actions = {
         { name: 'category', label: 'Loại', type: 'select', value: p?.category || 'food', options: [['food', '🍢 Đồ ăn'], ['drink', '🥤 Thức uống']] },
         { name: 'price', label: 'Giá bán (₫)', type: 'number', value: p?.price, required: true }
       ],
-      extra: `<div><b style="font-size:14px">Công thức cho 1 phần</b>
+      extra: `<div><b style="font-size:14.5px">Hình món</b>
+        <div class="iconpick"><span class="pic lg" data-prev></span><div>
+          <div class="row"><label class="btn sm upl">📷 Tải ảnh lên<input type="file" accept="image/*" hidden></label>
+          <button type="button" class="btn sm" data-noimg hidden>Bỏ ảnh</button></div>
+          <small style="display:block;margin-top:6px">Hoặc chọn một biểu tượng bên dưới</small></div></div>
+        <div class="emojis">${ICONS.map(e => `<button type="button" data-emo="${e}">${e}</button>`).join('')}</div></div>
+        <div><b style="font-size:14.5px">Công thức cho 1 phần</b>
         ${db.ingredients.length ? `<div class="rows" style="margin-top:6px">${(p?.recipe || []).map(row).join('')}</div>
         <button type="button" class="btn sm" data-addrow>＋ Thêm nguyên liệu</button>` : '<div class="mut">Chưa có nguyên liệu trong kho – hãy thêm ở mục Kho trước để tính được giá vốn.</div>'}</div>
         <div class="costbox"></div>`,
@@ -439,15 +501,28 @@ const actions = {
           const cost = productCost({ recipe: readRows(form) }), price = f(form.price.value), profit = price - cost;
           $('.costbox', form).innerHTML = `Giá vốn: <b>${money(cost)}</b> · Lãi mỗi phần: <b class="${profit >= 0 ? 'pos' : 'neg'}">${money(profit)}</b>${price ? ` (${(profit / price * 100).toFixed(0)}%)` : ''}`;
         };
-        form.addEventListener('input', recalc);
+        const prev = () => {
+          $('[data-prev]', form).innerHTML = img ? `<img src="${img}" alt="">` : esc(icon || guessIcon(form.elements.name.value, form.elements.category.value));
+          $('[data-noimg]', form).hidden = !img;
+          form.querySelectorAll('[data-emo]').forEach(b => b.classList.toggle('on', !img && b.dataset.emo === icon));
+        };
+        form.addEventListener('input', () => { recalc(); prev(); });
+        $('input[type=file]', form).addEventListener('change', async e => {
+          const file = e.target.files[0]; if (!file) return;
+          try { img = await resizeImage(file); prev(); } catch { alert('Không đọc được ảnh này, hãy thử ảnh khác.'); }
+        });
+        prev();
         form.addEventListener('click', e => {
+          const emo = e.target.closest('[data-emo]');
+          if (emo) { icon = emo.dataset.emo; img = ''; prev(); }
+          if (e.target.closest('[data-noimg]')) { img = ''; prev(); }
           if (e.target.closest('[data-addrow]')) $('.rows', form).insertAdjacentHTML('beforeend', row());
           if (e.target.closest('[data-rm]')) { e.target.closest('.rrow').remove(); recalc(); }
         });
         recalc();
       },
       onSubmit(d, form) {
-        const data = { name: d.name.trim(), category: d.category, price: f(d.price), recipe: readRows(form) };
+        const data = { name: d.name.trim(), category: d.category, price: f(d.price), recipe: readRows(form), icon, img };
         if (p) Object.assign(p, data); else db.products.push({ id: uid(), ...data });
         commit('Đã lưu món');
       }
